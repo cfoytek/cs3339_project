@@ -362,6 +362,16 @@ int main(int argc, char *argv[])
 
     gettimeofday(&starttime, NULL);
     Init<<<1, 1>>>();
+    /*
+      Call to TwoOpt, the function TwoOpt is called a kernel in CUDA. It creates
+      a grid containing blocks of threads, with each block containing a number
+      of threads. The <<<...>>> notation here is the execution configuration.
+      Parameters for it are <<<NumberOfBlocks, NumberOfThreadsPerBlock,
+                               AmountOfMemSharedBtwnThreads>>>
+      For the parameters in the function call, _d stands for device, i.e. the
+      GPU device for the computer. The _d suffix for variables differentiates
+      variables that are stored in regular memory vs those stored in GPU memory.
+    */
     TwoOpt<<<restarts, threads, sizeof(int) * threads>>>(cities, posx_d, posy_d, glob_d);
     CudaTest("kernel launch failed");  // needed for timing
     gettimeofday(&endtime, NULL);
