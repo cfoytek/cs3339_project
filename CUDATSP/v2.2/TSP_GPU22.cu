@@ -64,17 +64,39 @@ static __global__ void Init()
   lock_d = 0;
   soln_d = NULL;
 }
+/*
+  This function assigns a single "climber" to a block of threads, meaning
+  that if there are 10 blocks of threads, TwoOpt will randomize 10 topologies,
+  and then use the threads in that block to perform the TwoOpt moves in parallel.
 
+  The number of blocks TwoOpt will use is given by "restarts" taken in on the
+  command line, and the number of threads per block is calculated by the
+  best_thread_count function.
+
+  For our solver, we will also take in a number of restarts, but we will
+  sequentially randomize a topology, sequentially perform TwoOpt moves until
+  no better TwoOpt moves can be found, and then we will compare this local
+  optimum to the global best, and store the new solution if it's better
+  (store cost, and tour). If it's the first restart, we'll just store
+  it as best.
+*/
 static __global__ __launch_bounds__(1024, 2)
 void TwoOpt(int cities, float *posx_d, float *posy_d, int *glob_d)
 {
   int *buf = &glob_d[blockIdx.x * ((3 * cities + 2 + 31) / 32 * 32)];
   float *px = (float *)(&buf[cities]);
   float *py = &px[cities + 1];
+  /*
+    px_s and py_s are x and y coord arrays shared between threads,
+    maybe a buffer?
+  */
   __shared__ float px_s[tilesize];
   __shared__ float py_s[tilesize];
   __shared__ int bf_s[tilesize];
 
+  //Seems like this allocates cities to a certain thread number in each block?
+    //blockDim.x is the number of threads in a block
+    //threadIdx.x is the Id of an individual thread in a block
   for (int i = threadIdx.x; i < cities; i += blockDim.x) px[i] = posx_d[i];
   for (int i = threadIdx.x; i < cities; i += blockDim.x) py[i] = posy_d[i];
   __syncthreads();
@@ -231,7 +253,7 @@ static int best_thread_count(int cities)
 {
   int max, best, threads, smem, blocks, thr, perf, bthr;
 
-  max = cities - 2;
+  max = cities - 2;//
   if (max > 1024) max = 1024;
   best = 0;
   bthr = 4;
@@ -317,13 +339,22 @@ static int readInput(char *fname, float **posx_d, float **posy_d)  // ATT and CE
   fscanf(f, "%s", str);
   if (strcmp(str, "EOF") != 0) {fprintf(stderr, "didn't see 'EOF' at end of file\n");  exit(-1);}
 
+  /*
+    Allocate sequential space in GPU memory for our position arrays, we Allocate
+    enough space for each city, stored as a float, for each of our x & y coords.
+  */
   mallocOnGPU(*posx_d, sizeof(float) * cities);
   mallocOnGPU(*posy_d, sizeof(float) * cities);
+  /*
+    Copy our coordinate arrays into GPU memory as posx_d and posy_d. We don't
+    need to do this in our single threaded app, just need to load into posx and
+    posy.
+  */
   copyToGPU(*posx_d, posx, sizeof(float) * cities);
   copyToGPU(*posy_d, posy, sizeof(float) * cities);
 
   fclose(f);
-  free(posx);
+  free(posx);//Don't need to free memory for posx and posy in single threaded.
   free(posy);
 
   return cities;
@@ -358,6 +389,7 @@ int main(int argc, char *argv[])
     fprintf(stderr, "the problem size is too small for this version of the code\n");
   } else {
     threads = best_thread_count(cities);
+    //glob_d is globally shared memory between all threads (i think?)
     mallocOnGPU(glob_d, 4 * restarts * ((3 * cities + 2 + 31) / 32 * 32));
 
     gettimeofday(&starttime, NULL);
@@ -376,6 +408,9 @@ int main(int argc, char *argv[])
     CudaTest("kernel launch failed");  // needed for timing
     gettimeofday(&endtime, NULL);
 
+    /*
+      After running algorithm on all threads, we get
+    */
     copyFromGPUSymbol(&climbs, climbs_d, sizeof(int));
     copyFromGPUSymbol(&best, best_d, sizeof(int));
     copyFromGPUSymbol(&soln, soln_d, sizeof(void *));
