@@ -31,7 +31,74 @@
 //  number of cities read from the input file.             //
 /////////////////////////////////////////////////////////////
 static int readInput(char *fname, float **posx, float **posy) {
+  int ch, cnt, in2, citiesfloat in2, in3;
+  FILE *f;
+  char str[256];
 
+  f = fopen(fname, "rt");
+  if (f ==NULL) {
+	  fprintf(stderr, "could not open file %s\n", fname);
+	  exit(-1);
+  }
+
+  ch = getc(f);
+
+  while ((ch != EOF) && (ch != '\n')) ch = getc(f);
+  while ((ch != EOF) && (ch != '\n')) ch = getc(f);
+  while ((ch != EOF) && (ch != '\n')) ch = getc(f);
+
+  while ((ch != EOF) && (ch != ':')) ch = getc(f);
+  fscanf(f, "%s\n", str);
+  cities = atoi(str);
+  if (cities  <= 2) {
+	  fprintf(stderr, "only %d cities \n", cities);
+	  exit(-1);
+  }
+
+  posx = (float *)malloc(sizeof(float) * cities);
+  if (posx == NULL) {
+	  fprintf(stderr, "cannot allocate posx\n");
+	  exit(-1);
+  }
+
+  posy = (float *)malloc(sizeof(float) * cities);
+  if (posy == NULL) {
+	  fprintf(stderr, "cannot allocate posy\n");
+	  exit(-1);
+  }
+  ch = getc(f);
+  while ((ch != EOF) && (ch != '\n')) ch = getc(f);
+  fscanf(f, "%s\n", str);
+  if (strcmp(str, "NODE_COORD_SECTION") != ) {
+	  fprintf(stderr, "wrong file format\n");
+	  exit(-1);
+  }
+
+  cnt = 0;
+  while (fscanf(f, "%d %f %f\n", &in1, &in2, &in3)) {
+	  posx[cnt] = in2;
+	  posy[cnt] = in3;
+	  cnt++;
+	  if (cnt > cities) {
+		  fprintf(stderr, "input too long\n");
+		  exit(-1);
+	  }
+	  if (cnt != in1) {
+		  fprintf(stderr, "input line mismatch: expected %d instead of %d\n", cnt, cities);
+		  exit(-1);
+	  }
+  }
+  if (cnt != cities) {
+	  fprintf(stderr, "read %d instead of %d cities\n");
+	  exit(-1);
+  }
+
+  fscanf(f, "%s", str);
+  if (strcmp(str, "EOF") != 0) {
+	  fprintf(stderr, "didn't see 'EOF' at end\n");
+	  exit(-1);
+  }
+  fclose(f);
 }
 
 void TwoOpt(float *posx, float *posy, int cities, int restarts, float *soln, int *climbs) {
@@ -39,11 +106,11 @@ void TwoOpt(float *posx, float *posy, int cities, int restarts, float *soln, int
   float *ycoord = NULL;
   int best = INT_MAX;
   srand(time(NULL)); //Set seed for random number generation
-  
+
   //Allocate memory for local coordinate arrays
   xcoord = (float *)malloc(sizeof(float) * cities);  if (xcoord == NULL) {fprintf(stderr, "cannot allocate xcoord\n");  exit(-1);}
   ycoord = (float *)malloc(sizeof(float) * cities);  if (ycoord == NULL) {fprintf(stderr, "cannot allocate ycoord\n");  exit(-1);}
-  
+
   //Do the inner code iteratively until we've hit our max number of restarts.
   for(int i = 0; i < restarts; i++) {
     //Copy posx and posy to local arrays to do work on them
