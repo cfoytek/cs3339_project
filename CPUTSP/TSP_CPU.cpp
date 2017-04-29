@@ -19,6 +19,7 @@
 #include <math.h>
 #include <limits.h>
 #include <sys/time.h>
+#include <time.h>
 
 #define dist(a, b) round(sqrtf((xcoord[a] - xcoord[b]) * (xcoord[a] - xcoord[b]) + (ycoord[a] - ycoord[b]) * (ycoord[a] - ycoord[b])))
 #define swap(a, b) {float tmp = a;  a = b;  b = tmp;}
@@ -69,12 +70,12 @@ void TwoOpt(float *posx, float *posy, int cities, int restarts, float *soln, int
       minchange = 0;
       for(int i = 0; i < cities - 2; i++) {//For each city i in the tour
         minchange += dist(i, i + 1);//Calculate the distance between i and i+1
-        for(j = i + 2; j < cities; j++) {//Then, loop through each city j > i + 1 in the tour
+        for(int j = i + 2; j < cities; j++) {//Then, loop through each city j > i + 1 in the tour
           int change = dist(i, j) + dist(i + 1, j + 1) - dist(j, j + 1);//And calculate the change if a TwoOpt move were performed
           if(minchange > change) {//If the change that would happen is better than our minimum change
             minchange = change;//Set our minchange to the change that would occur and record the i and j values for swapping
             mini = i;
-            minj = j
+            minj = j;
           }
         }
         minchange -= dist(i, i + 1);//Remove the distance between i and i+1 to get actual change to tour length
@@ -110,9 +111,9 @@ void TwoOpt(float *posx, float *posy, int cities, int restarts, float *soln, int
     if(myCost < best) {
       best = myCost; //If our tour is better than the prev best, save it
     }
-    &climbs++;
+    *climbs += 1;
   }
-  &soln = best; //Set our soln to best so we can get it in main
+  *soln = best; //Set our soln to best so we can get it in main
   free(xcoord);
   free(ycoord);
 }
@@ -123,9 +124,9 @@ int main(int argc, char *argv[]) {
   //probably wise to do a small number and work up to a semi-reasonable number.
   printf("2-opt TSP CPU based single threaded solver\n\n");
 
-  int cities, restarts, climbs, best;
+  int cities, restarts, climbs;
   long long moves;
-  float *posx, *posy;
+  float *posx, *posy, best;
   double runtime;
   struct timeval starttime, endtime;
 
@@ -137,7 +138,7 @@ int main(int argc, char *argv[]) {
   printf("configuration: %d cities, %d restarts, %s input\n", cities, restarts, argv[1]);
 
   gettimeofday(&starttime, NULL);
-  TwoOpt(&posx, &posy, cities, restarts, &best, &climbs); //Make call to TwoOpt
+  TwoOpt(posx, posy, cities, restarts, &best, &climbs); //Make call to TwoOpt
   gettimeofday(&endtime, NULL);
 
   //After execution, calculate runtime, and number of moves performed.
