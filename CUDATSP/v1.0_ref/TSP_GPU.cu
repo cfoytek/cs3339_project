@@ -72,6 +72,15 @@ __global__ void Reset110Kernel(int blocksTimesThreads)
 /* is found, at which point a new climber is obtained from the worklist.      */
 /******************************************************************************/
 
+/*
+  Parameters for TSP110Kernel:
+    *gdist: global distance matrix with distances between cities
+    *gresult: the result of performing TwoOpt moves for all tours, an array of 3 ints
+    touroffset:
+    cities: the number of cities in the tour
+    tours: The number of blocks
+    *gtours:
+*/
 __global__
 __launch_bounds__(1024, 1)
 void TSP110Kernel(int *gdist, int *gresult, int touroffset, int cities, int tours, int *gtours)
@@ -90,16 +99,23 @@ void TSP110Kernel(int *gdist, int *gresult, int touroffset, int cities, int tour
 
   citiesm1 = cities - 1;
   citiespad = (citiesm1 + 33) & (~31);
-  mytour = threadIdx.x + blockIdx.x * blockDim.x;
+  mytour = threadIdx.x + blockIdx.x * blockDim.x;//Set mytour to the global index of the current thread
+
+  //Only randomizes a new tour if the current thread index is less than the total
+  //number of concurrent threads -- "restarts" from cmd input. We pick this as
+  //our end condition for a single threaded solver.
+  //    This basically makes sure that if our number of "restarts" taken in from
+  //    cmd is less than the number of threads we're using, so we don't exceed
+  //    the max number of "restarts" when initializing threads (i think?)
   if (mytour < tours) {
     // Default starting tour for this thread's first climber
     for (i = 0; i < citiesm1; i++) {
-      tour[i] = i + 1;
+      tour[i] = i + 1;//Copy each
     }
     tour[citiesm1] = 0;
 
     // Randomize the initial tour
-    randx = mytour + touroffset;  // use mytour as random seed
+    randx = mytour + touroffset;  // use mytour (global thread id) as random seed
     for (i = 0; i < citiesm1; i++) {
       randx = (MULT * randx + ADD) & MASK;
       j = randx % citiesm1;
@@ -108,6 +124,7 @@ void TSP110Kernel(int *gdist, int *gresult, int touroffset, int cities, int tour
       tour[j] = to;
     }
 
+    //Main loop for the thread (after initializing it)
     do {
       minchange = 0;
       ti = 0;  // tour[-1]
@@ -119,7 +136,7 @@ void TSP110Kernel(int *gdist, int *gresult, int touroffset, int cities, int tour
         tiplus1 = ti_p1 * cities;
         dist_i_iplus1 = sdist[ti + ti_p1];
         tj = ti_p1 = tour[i-1];
-        sdist_ti = &sdist[ti]; // Save pointers to i and i+1 rows of distance matrix 
+        sdist_ti = &sdist[ti]; // Save pointers to i and i+1 rows of distance matrix
         sdist_tiplus1 = &sdist[tiplus1];
 #pragma unroll 8
         for (j = i; j < cities; j++) {
@@ -151,7 +168,7 @@ void TSP110Kernel(int *gdist, int *gresult, int touroffset, int cities, int tour
           i++;
           j--;
         }
-      } 
+      }
       // Otherwise, this climber found a local minimum, so compute the tour cost,
       // record if best solution so far, and get a new climber from the worklist
       else {
@@ -180,7 +197,11 @@ void TSP110Kernel(int *gdist, int *gresult, int touroffset, int cities, int tour
         }
         // Get the next climber and randomize a new tour
         mytour = atomicAdd((int *)&gcurr, 1);
+        //Parallel increment of gcurr (current number of "restarts" performed)
+        //atomicAdd returns gcurr's value before the increment took place
         if (mytour < tours) {
+          //If we still have "restarts" left to perform, we'll create a new tour
+          //for the thread, and randomize it
           for (i = 0; i < citiesm1; i++) {
             tour[i] = i + 1;
           }
@@ -282,6 +303,8 @@ static int readFile(char *filename, int *dist)
   }
   fclose(f);
 
+  //This for loop creates a distance matrix, unfortunately this method means
+  //we lose city ordering, but we will retain a minimum cost for metrics.
   for (i = 0; i < cities; i++) {
     for (j = 0; j < cities; j++) {
       dx = posx[i] - posx[j];
@@ -320,7 +343,7 @@ static int VerifySystemParameters(int *SMs)
   int maxComputePerf = 0, maxPerfDevice = 0, SMPerMP;
   int archCoresSM[3] = { 1, 8, 32 };
   cudaDeviceProp deviceProp;
-  
+
   cudaGetDeviceCount(&deviceCount);
   if(deviceCount <= 0) {
     fprintf(stderr, "There is no device supporting CUDA\n");
@@ -381,7 +404,7 @@ void run(char *filename, int tours, int SMs)
 
   cities = readFile(filename, dist);
   printf("%s: %d tours with %d cities each\n", filename, tours, cities);
-  
+
   if (tours < 1) {
      fprintf(stderr, "tour count must be positive\n");
      exit(-1);
@@ -392,13 +415,14 @@ void run(char *filename, int tours, int SMs)
   if (cudaSuccess != cudaMalloc((void **)&lgresult, sizeof(int) * (cities + 3))) fprintf(stderr, "could not allocate gresult\n");  CudaTest("couldn't allocate gresult");
   if (cudaSuccess != cudaMalloc((void **)&lgdist, sizeof(int) * cities * cities)) fprintf(stderr, "could not allocate gdist\n");  CudaTest("couldn't allocate gdist");
   if (cudaSuccess != cudaMemcpy(lgdist, dist, sizeof(int) * cities * cities, cudaMemcpyHostToDevice)) fprintf(stderr, "copying of dist to device failed\n");  CudaTest("dist copy to device failed");
+  //Above if statement copies the dist matrix to the GPU, we will just pass the matrix directly for single threaded
 
   ResetKernel<<<SMs*3, 512>>>();
   best = 0x7fffffff;
   tour = 0;
   if (cities <= 110) {
-    blocks = min(tours, TOURS110);
-    while (tours > tour) {
+    blocks = min(tours, TOURS110); //Selects the minimum between the number of climbers given in cmd input, and TOURS110 (a huge number)
+    while (tours > tour) {//While our tour number is less than that huge number
       Reset110Kernel<<<1, 1>>>(SMs*2*512);
       TSP110Kernel<<<SMs, 1024>>>(lgdist, lgresult, tour, cities, blocks, lgtours);
 
@@ -442,7 +466,7 @@ int main(int argc, char *argv[])
   }
 
   printf("\nTSP_GPU v1.0  Copyright (c) 2011 Texas State University-San Marcos\n");
-  
+
   deviceID = VerifySystemParameters(&SMs);
   cudaSetDevice(deviceID);
   CudaTest("initialization");
@@ -454,4 +478,3 @@ int main(int argc, char *argv[])
 
   return 0;
 }
-

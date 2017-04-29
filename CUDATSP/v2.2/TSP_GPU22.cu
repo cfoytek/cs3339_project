@@ -94,13 +94,16 @@ void TwoOpt(int cities, float *posx_d, float *posy_d, int *glob_d)
   __shared__ float py_s[tilesize];
   __shared__ int bf_s[tilesize];
 
-  //Seems like this allocates cities to a certain thread number in each block?
-    //blockDim.x is the number of threads in a block
-    //threadIdx.x is the Id of an individual thread in a block
+  //Each thread will perform these instructions in parallel, i.e. thread 0, 1, 2, 3, 4
+  //will load posx_d[0,1,2,3,4] to px[0,1,2,3,4] in parallel, then thread 0 will load
+  //posx_d[5] to px[5] and so on. These two lines copy posx_d and posy_d to px
+  //and py in parallel. The entire array gets copied.
   for (int i = threadIdx.x; i < cities; i += blockDim.x) px[i] = posx_d[i];
   for (int i = threadIdx.x; i < cities; i += blockDim.x) py[i] = posy_d[i];
   __syncthreads();
 
+  //Thread 0 (in each block) loops through the coordinate arrays and randomizes
+  //the tour for the block.
   if (threadIdx.x == 0) {  // serial permutation
     curandState rndstate;
     curand_init(blockIdx.x, 0, 0, &rndstate);
@@ -304,19 +307,21 @@ static int readInput(char *fname, float **posx_d, float **posy_d)  // ATT and CE
   int ch, cnt, in1, cities;
   float in2, in3;
   FILE *f;
-  float *posx, *posy;
+  float *posx, *posy;//Don't need these in TSP_CPU
   char str[256];  // potential for buffer overrun
 
   f = fopen(fname, "rt");
   if (f == NULL) {fprintf(stderr, "could not open file %s\n", fname);  exit(-1);}
 
+  //Skip 3 lines in input file
   ch = getc(f);  while ((ch != EOF) && (ch != '\n')) ch = getc(f);
   ch = getc(f);  while ((ch != EOF) && (ch != '\n')) ch = getc(f);
   ch = getc(f);  while ((ch != EOF) && (ch != '\n')) ch = getc(f);
 
+  //Read until the ':' on line 4, and discard what was read
   ch = getc(f);  while ((ch != EOF) && (ch != ':')) ch = getc(f);
-  fscanf(f, "%s\n", str);
-  cities = atoi(str);
+  fscanf(f, "%s\n", str);//Read the rest of line 4 to str
+  cities = atoi(str);//Set cities to the number read-> "DIMENSION: " in input file
   if (cities <= 2) {fprintf(stderr, "only %d cities\n", cities);  exit(-1);}
 
   posx = (float *)malloc(sizeof(float) * cities);  if (posx == NULL) {fprintf(stderr, "cannot allocate posx\n");  exit(-1);}
@@ -354,7 +359,7 @@ static int readInput(char *fname, float **posx_d, float **posy_d)  // ATT and CE
   copyToGPU(*posy_d, posy, sizeof(float) * cities);
 
   fclose(f);
-  free(posx);//Don't need to free memory for posx and posy in single threaded.
+  free(posx);//Don't need to free memory for posx and posy in TSP_CPU.
   free(posy);
 
   return cities;
