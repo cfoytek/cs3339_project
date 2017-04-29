@@ -31,74 +31,80 @@
 //  number of cities read from the input file.             //
 /////////////////////////////////////////////////////////////
 static int readInput(char *fname, float **posx, float **posy) {
-  int ch, cnt, in2, citiesfloat in2, in3;
-  FILE *f;
-  char str[256];
+    int ch, cnt, in1, cities;
+    float in2, in3;
+    FILE *f;
+    char str[256];
 
-  f = fopen(fname, "rt");
-  if (f ==NULL) {
-	  fprintf(stderr, "could not open file %s\n", fname);
-	  exit(-1);
-  }
+    f = fopen(fname, "rt");
+    if (f == NULL) {
+        fprintf(stderr, "could not open file %s\n", fname);
+        exit(-1);
+    }
 
-  ch = getc(f);
+    ch = getc(f);
+    while ((ch != EOF) && (ch != '\n')) ch = getc(f);
+    ch = getc(f);
+    while ((ch != EOF) && (ch != '\n')) ch = getc(f);
+    ch = getc(f);
+    while ((ch != EOF) && (ch != '\n')) ch = getc(f);
 
-  while ((ch != EOF) && (ch != '\n')) ch = getc(f);
-  while ((ch != EOF) && (ch != '\n')) ch = getc(f);
-  while ((ch != EOF) && (ch != '\n')) ch = getc(f);
+    ch = getc(f);
+    while ((ch != EOF) && (ch != ':')) ch = getc(f);
+    fscanf(f, "%s\n", str);
+    cities = atoi(str);
+    if (cities <= 2) {
+        fprintf(stderr, "only %d cities\n", cities);
+        exit(-1);
+    }
 
-  while ((ch != EOF) && (ch != ':')) ch = getc(f);
-  fscanf(f, "%s\n", str);
-  cities = atoi(str);
-  if (cities  <= 2) {
-	  fprintf(stderr, "only %d cities \n", cities);
-	  exit(-1);
-  }
+    (*posx) = (float *) malloc(sizeof (float) * cities);
+    if (posx == NULL) {
+        fprintf(stderr, "cannot allocate posx\n");
+        exit(-1);
+    }
+    (*posy) = (float *) malloc(sizeof (float) * cities);
+    if (posy == NULL) {
+        fprintf(stderr, "cannot allocate posy\n");
+        exit(-1);
+    }
 
-  posx = (float *)malloc(sizeof(float) * cities);
-  if (posx == NULL) {
-	  fprintf(stderr, "cannot allocate posx\n");
-	  exit(-1);
-  }
+    ch = getc(f);
+    while ((ch != EOF) && (ch != '\n')) ch = getc(f);
+    fscanf(f, "%s\n", str);
+    if (strcmp(str, "NODE_COORD_SECTION") != 0) {
+        fprintf(stderr, "wrong file format\n");
+        exit(-1);
+    }
 
-  posy = (float *)malloc(sizeof(float) * cities);
-  if (posy == NULL) {
-	  fprintf(stderr, "cannot allocate posy\n");
-	  exit(-1);
-  }
-  ch = getc(f);
-  while ((ch != EOF) && (ch != '\n')) ch = getc(f);
-  fscanf(f, "%s\n", str);
-  if (strcmp(str, "NODE_COORD_SECTION") != ) {
-	  fprintf(stderr, "wrong file format\n");
-	  exit(-1);
-  }
+    cnt = 0;
+    while (fscanf(f, "%d %f %f\n", &in1, &in2, &in3)) {
+        (*posx)[cnt] = in2;
+        (*posy)[cnt] = in3;
+        cnt++;
+        if (cnt > cities) {
+            fprintf(stderr, "input too long\n");
+            exit(-1);
+        }
+        if (cnt != in1) {
+            fprintf(stderr, "input line mismatch: expected %d instead of %d\n", cnt, in1);
+            exit(-1);
+        }
+    }
+    if (cnt != cities) {
+        fprintf(stderr, "read %d instead of %d cities\n", cnt, cities);
+        exit(-1);
+    }
 
-  cnt = 0;
-  while (fscanf(f, "%d %f %f\n", &in1, &in2, &in3)) {
-	  posx[cnt] = in2;
-	  posy[cnt] = in3;
-	  cnt++;
-	  if (cnt > cities) {
-		  fprintf(stderr, "input too long\n");
-		  exit(-1);
-	  }
-	  if (cnt != in1) {
-		  fprintf(stderr, "input line mismatch: expected %d instead of %d\n", cnt, cities);
-		  exit(-1);
-	  }
-  }
-  if (cnt != cities) {
-	  fprintf(stderr, "read %d instead of %d cities\n");
-	  exit(-1);
-  }
+    fscanf(f, "%s", str);
+    if (strcmp(str, "EOF") != 0) {
+        fprintf(stderr, "didn't see 'EOF' at end of file\n");
+        exit(-1);
+    }
 
-  fscanf(f, "%s", str);
-  if (strcmp(str, "EOF") != 0) {
-	  fprintf(stderr, "didn't see 'EOF' at end\n");
-	  exit(-1);
-  }
-  fclose(f);
+    fclose(f);
+    return cities;
+
 }
 
 void TwoOpt(float *posx, float *posy, int cities, int restarts, float *soln, int *climbs) {
@@ -217,7 +223,8 @@ int main(int argc, char *argv[]) {
   moves = 1LL * climbs * (cities - 2) * (cities - 1) / 2;
 
   //Print results
-  printf("runtime = %.4f s, %.8f Gmoves/s\n", runtime, moves * 0.000000001 / runtime);
+  printf("runtime = %.5f s\n", runtime);
+  printf("performed %u moves\n", moves);
   printf("best found tour length = %f\n", best);
 
   //Memory cleanup
