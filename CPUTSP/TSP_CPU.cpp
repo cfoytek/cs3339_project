@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <limits.h>
+#include <string.h>
 #include <sys/time.h>
 #include <time.h>
 
@@ -30,14 +31,19 @@
 //  number of cities read from the input file.             //
 /////////////////////////////////////////////////////////////
 static int readInput(char *fname, float **posx, float **posy) {
-  //TODO: read input from file to coordinate arrays
+
 }
 
 void TwoOpt(float *posx, float *posy, int cities, int restarts, float *soln, int *climbs) {
-  float *xcoord, *ycoord;
+  float *xcoord = NULL;
+  float *ycoord = NULL;
   int best = INT_MAX;
   srand(time(NULL)); //Set seed for random number generation
-
+  
+  //Allocate memory for local coordinate arrays
+  xcoord = (float *)malloc(sizeof(float) * cities);  if (xcoord == NULL) {fprintf(stderr, "cannot allocate xcoord\n");  exit(-1);}
+  ycoord = (float *)malloc(sizeof(float) * cities);  if (ycoord == NULL) {fprintf(stderr, "cannot allocate ycoord\n");  exit(-1);}
+  
   //Do the inner code iteratively until we've hit our max number of restarts.
   for(int i = 0; i < restarts; i++) {
     //Copy posx and posy to local arrays to do work on them
@@ -52,8 +58,6 @@ void TwoOpt(float *posx, float *posy, int cities, int restarts, float *soln, int
       swap(xcoord[i], xcoord[j]);
       swap(ycoord[i], ycoord[j])
     }
-    xcoord[cities] = xcoord[0];
-    ycoord[cities] = ycoord[0];
 
     //After randomizing our tour we find best TwoOpt moves until no better moves
     //are found. If no better moves are found, we've hit a local minimum.
@@ -132,7 +136,7 @@ int main(int argc, char *argv[]) {
 
   //Read in command line parameters, initialize position arrays with readInput
   if (argc != 3) {fprintf(stderr, "\narguments: input_file restart_count\n"); exit(-1);}
-  //cities = readInput(argv[1], &posx, &posy);
+  cities = readInput(argv[1], &posx, &posy);
   restarts = atoi(argv[2]);
   if (restarts < 1) {fprintf(stderr, "restart_count is too small: %d\n", restarts); exit(-1);}
   printf("configuration: %d cities, %d restarts, %s input\n", cities, restarts, argv[1]);
@@ -146,8 +150,8 @@ int main(int argc, char *argv[]) {
   moves = 1LL * climbs * (cities - 2) * (cities - 1) / 2;
 
   //Print results
-  printf("runtime = %.4f s, %.3f Gmoves/s\n", runtime, moves * 0.000000001 / runtime);
-  printf("best found tour length = %d\n", best);
+  printf("runtime = %.4f s, %.8f Gmoves/s\n", runtime, moves * 0.000000001 / runtime);
+  printf("best found tour length = %f\n", best);
 
   //Memory cleanup
   free(posx);
